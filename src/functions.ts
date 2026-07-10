@@ -17,7 +17,7 @@
 
 import { defineTableFunction, secretsOfType, type OutputCollector } from "@query-farm/vgi";
 import { Utf8, Int64 } from "@query-farm/apache-arrow";
-import { collectCost, keyColumns, ACTUAL_LOOKBACK_DAYS } from "./cost-query.js";
+import { collectCost, keyColumns, ACTUAL_LOOKBACK_DAYS, COST_TYPES, GRANULARITIES } from "./cost-query.js";
 import { costSchema, buildCostBatch } from "./schema.js";
 import type { GraphClient } from "@vgi-azure/graph-core";
 
@@ -88,6 +88,137 @@ export function makeCostFunction(clientFactory: ClientFactory) {
       group_by: "",
       cost_type: "ActualCost",
       restatement_lookback_days: ACTUAL_LOOKBACK_DAYS,
+    },
+    // Machine-readable constraints so agents discover valid inputs (VGI317). granularity
+    // and cost_type are CLOSED sets sourced verbatim from cost-query.ts (GRANULARITIES /
+    // COST_TYPES) so the constraint can never drift from the code that validates them.
+    // scope / from / to / group_by are OPEN (arbitrary ARM paths, dates, dimension/tag
+    // names) so they declare no choices — their descriptions are worded as formats, not
+    // enumerations. restatement_lookback_days is a non-negative day count.
+    argConstraints: {
+      granularity: { choices: GRANULARITIES },
+      cost_type: { choices: COST_TYPES },
+      restatement_lookback_days: { ge: 0 },
+    },
+    argDocs: {
+      scope:
+        "The ARM scope to query, e.g. `subscriptions/{id}`, " +
+        "`providers/Microsoft.Billing/billingAccounts/{id}`, `managementGroups/{id}`, or " +
+        "`subscriptions/{id}/resourceGroups/{name}`. Required (positional). The service principal " +
+        "in the azure_graph secret must have Cost Management reader access on this scope.",
+      from:
+        "Low edge of the requested window (ISO date or instant, e.g. `2026-06-01`). This IS the " +
+        "caller-held watermark: on an incremental scan pass back the prior scan's `_watermark_next`. " +
+        "The function re-pulls a trailing restatement window starting `from − restatement_lookback_days` " +
+        "(open-period-clamped for AmortizedCost). Required (positional).",
+      to:
+        "High edge of the requested window (ISO date or instant), typically today (UTC). Rides back on " +
+        "the marker row as `_watermark_next`, the new high-water watermark to persist. Required (positional).",
+      granularity:
+        "Time bucketing of the returned rows: `Daily`, `Monthly`, or `None` (a single total over the " +
+        "window). Named (name:=value). Defaults to `Daily`.",
+      group_by:
+        "Comma-separated grouping list, each token `Dimension:Name` or `TagKey:Name` (e.g. " +
+        "`Dimension:ResourceGroup,TagKey:costcenter`; a bare token defaults to a Dimension). Each " +
+        "becomes an extra result column and part of the overwrite key. Empty (the default) returns an " +
+        "ungrouped total. CHANGING this between scans changes the overwrite-key shape → full reload, " +
+        "not incremental. Named (name:=value).",
+      cost_type:
+        "`ActualCost` (billed cost as incurred) or `AmortizedCost` (reservation/savings-plan purchases " +
+        "spread across the benefit period). AmortizedCost auto-widens the trailing lookback toward the " +
+        "open, still-restating billing period (capped). Named (name:=value). Defaults to `ActualCost`.",
+      restatement_lookback_days:
+        "Size in days of the trailing ActualCost restatement window re-pulled on each scan " +
+        "(effFrom = from − this). Guards against retroactive restatement of recently-reported costs. " +
+        "Named (name:=value). Defaults to 7. (AmortizedCost instead uses an open-period clamp.)",
+    },
+    examples: [
+      {
+        sql:
+          "SELECT date, \"ResourceGroup\", cost, currency FROM azure.main.cost_query(" +
+          "'subscriptions/<guid>', '2026-06-01', '2026-06-30', granularity := 'Daily', " +
+          "group_by := 'Dimension:ResourceGroup') WHERE _row_kind IS NULL",
+        description: "Daily actual cost by resource group over a month (data rows only)",
+      },
+      {
+        sql:
+          "SELECT date, cost, currency FROM azure.main.cost_query(" +
+          "'subscriptions/<guid>', '2026-01-01', '2026-06-30', granularity := 'Monthly', " +
+          "cost_type := 'AmortizedCost') WHERE _row_kind IS NULL",
+        description: "Ungrouped monthly amortized cost total",
+      },
+      {
+        sql:
+          "SELECT _watermark_next, _restated_from, _key_columns FROM azure.main.cost_query(" +
+          "'subscriptions/<guid>', '2026-06-01', '2026-06-30') WHERE _row_kind = 'marker'",
+        description: "Read the restatement watermark to persist for the next incremental scan",
+      },
+    ],
+    tags: {
+      "vgi.category": "cost-management",
+      "vgi.title": "Azure Cost Query",
+      "vgi.keywords": JSON.stringify([
+        "azure",
+        "cost",
+        "cost management",
+        "finops",
+        "billing",
+        "spend",
+        "actual cost",
+        "amortized cost",
+        "restatement",
+        "watermark",
+      ]),
+      "vgi.doc_llm":
+        "Query Azure Cost Management for actual or amortized cost of an ARM scope over a trailing " +
+        "restatement window, returned as typed rows: an ISO `date`, one Utf8 column per grouping " +
+        "dimension named in `group_by`, a Float64 `cost`, and a `currency`. Because Azure restates " +
+        "past-day costs for days-to-weeks, each scan re-pulls [from−lookback, to] and the caller MUST " +
+        "apply by OVERWRITE keyed on (scope, date, grouping dims) — never a blind INSERT. Read data " +
+        "rows with `WHERE _row_kind IS NULL`; the single marker row carries `_watermark_next` (persist " +
+        "as the next `from`), `_restated_from` (low edge to overwrite), and `_key_columns` (the " +
+        "group_by key shape). Requires an app-only azure_graph secret (ARM audience).",
+      "vgi.doc_md":
+        "## cost_query\n\n" +
+        "Azure Cost Management actual/amortized cost for an ARM scope over a trailing restatement " +
+        "window. The output schema is DEFERRED — it is derived at bind time from the `group_by` " +
+        "argument (one extra column per grouping dimension), so it varies by call.\n\n" +
+        "Read data rows with `WHERE _row_kind IS NULL`. Persist the marker row's `_watermark_next` as " +
+        "the next `from`, and apply each scan by OVERWRITE over `[_restated_from, _watermark_next]` " +
+        "keyed on (scope, date, grouping dims) — never a blind INSERT (that double-counts on every " +
+        "restatement). See the example queries for grouped, amortized, and watermark-read calls.",
+      // The result schema is DYNAMIC (varies by the `group_by` argument), so it is
+      // documented as vgi.result_dynamic_columns_md (VGI307/VGI326) — one Name | Type |
+      // Description variant table per shape. The default (ungrouped) variant adds no
+      // dimension columns; the grouped variant shows the extra Utf8 column injected per
+      // grouping token (here `ResourceGroup`), positioned between `date` and `cost`.
+      "vgi.result_dynamic_columns_md":
+        "The result schema is DEFERRED — decided at bind time from the `group_by` argument. " +
+        "**One extra `VARCHAR` column is injected per grouping token**, named exactly as the " +
+        "dimension/tag key (e.g. `group_by := 'Dimension:ResourceGroup,TagKey:costcenter'` adds a " +
+        "`ResourceGroup` and a `costcenter` column), positioned between `date` and `cost`. The two " +
+        "variant tables below show the default ungrouped shape and a representative grouped shape.\n\n" +
+        "### Default (empty `group_by`) — no dimension columns\n\n" +
+        "| Name | Type | Description |\n" +
+        "| --- | --- | --- |\n" +
+        "| date | VARCHAR | ISO date of the cost bucket (per `granularity`). NULL on the marker row. |\n" +
+        "| cost | DOUBLE | Cost for the bucket (Float64). NULL on the marker row. |\n" +
+        "| currency | VARCHAR | Billing currency code (e.g. USD). NULL on the marker row. |\n" +
+        "| _row_kind | VARCHAR | NULL for data rows; `marker` for the single trailing cursor row. |\n" +
+        "| _watermark_next | VARCHAR | On the marker row, the new high-water `to` to persist and pass back as the next `from`; NULL on data rows. |\n" +
+        "| _restated_from | VARCHAR | On the marker row, the low edge of the overwritten (restated) window; NULL on data rows. |\n" +
+        "| _key_columns | VARCHAR | On the marker row, the ordered grouping-key column set (comma-joined) guarding the group_by key shape; NULL on data rows. |\n\n" +
+        "### Grouped (e.g. `group_by := 'Dimension:ResourceGroup'`) — one extra dimension column\n\n" +
+        "| Name | Type | Description |\n" +
+        "| --- | --- | --- |\n" +
+        "| date | VARCHAR | ISO date of the cost bucket (per `granularity`). NULL on the marker row. |\n" +
+        "| ResourceGroup | VARCHAR | The grouping-dimension value (one such column per `group_by` token); part of the overwrite key. NULL on the marker row. |\n" +
+        "| cost | DOUBLE | Cost for the bucket (Float64). NULL on the marker row. |\n" +
+        "| currency | VARCHAR | Billing currency code (e.g. USD). NULL on the marker row. |\n" +
+        "| _row_kind | VARCHAR | NULL for data rows; `marker` for the single trailing cursor row. |\n" +
+        "| _watermark_next | VARCHAR | On the marker row, the new high-water `to` to persist and pass back as the next `from`; NULL on data rows. |\n" +
+        "| _restated_from | VARCHAR | On the marker row, the low edge of the overwritten (restated) window; NULL on data rows. |\n" +
+        "| _key_columns | VARCHAR | On the marker row, the ordered grouping-key column set (comma-joined) guarding the group_by key shape; NULL on data rows. |",
     },
     // Schema decided at bind from group_by (deferred-schema gotcha, SPEC §4).
     onBind: (p) => ({ outputSchema: costSchema(p.args.group_by) }),

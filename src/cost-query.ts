@@ -29,8 +29,14 @@ import { isoToMs, msToIso } from "@vgi-azure/graph-core";
 /** Pinned API version — never inline a version string at a call site (SPEC §2). */
 export const COST_API_VERSION = "2023-03-01";
 
-export type CostType = "ActualCost" | "AmortizedCost";
-export type Granularity = "Daily" | "Monthly" | "None";
+/** The closed set of Cost Management cost types. Single source of truth for both the
+ *  `CostType` union and the cost_query `cost_type` arg `choices` (so metadata can't drift). */
+export const COST_TYPES = ["ActualCost", "AmortizedCost"] as const;
+export type CostType = (typeof COST_TYPES)[number];
+/** The closed set of Cost Management granularities. Single source of truth for both the
+ *  `Granularity` union and the cost_query `granularity` arg `choices`. */
+export const GRANULARITIES = ["Daily", "Monthly", "None"] as const;
+export type Granularity = (typeof GRANULARITIES)[number];
 
 /** Default trailing restatement window for ActualCost (SPEC §2 step 1). */
 export const ACTUAL_LOOKBACK_DAYS = 7;

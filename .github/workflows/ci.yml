@@ -13,5 +13,27 @@ permissions:
   contents: read
 
 jobs:
+  # Install, own-source typecheck, and bun unit tests (shared reusable workflow).
   ci:
     uses: Query-farm/vgi-actions/.github/workflows/ts-ci.yml@main
+
+  # Metadata-quality gate (vgi-lint): scores the worker's catalog/schema/function/view
+  # docs, tags, categories, per-arg docs, result schemas, and examples. execute:false keeps
+  # it deterministic and credential-free — cost_query needs a live app-only azure_graph
+  # secret and a network call to Azure Cost Management to scan, so the VGI9xx execution
+  # rules are covered separately, not here. fail-on info = strict (zero findings at info or
+  # above). The action tag @v1 resolves the latest published vgi-lint-check (unpinned).
+  lint:
+    name: metadata quality (vgi-lint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - name: Install worker dependencies
+        run: bun install --frozen-lockfile
+      - name: vgi-lint
+        uses: Query-farm/vgi-lint-check@v1
+        with:
+          location: "bun run ${{ github.workspace }}/src/worker.ts"
+          fail-on: info
+          execute: "false"
