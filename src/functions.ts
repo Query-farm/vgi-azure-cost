@@ -153,10 +153,49 @@ export function makeCostFunction(clientFactory: ClientFactory) {
           "'subscriptions/<guid>', '2026-06-01', '2026-06-30') WHERE _row_kind = 'marker'",
         description: "Read the restatement watermark to persist for the next incremental scan",
       },
+      {
+        sql:
+          "SELECT date, \"ServiceName\", \"costcenter\", cost, currency FROM azure.main.cost_query(" +
+          "'subscriptions/<guid>', '2026-06-01', '2026-06-30', granularity := 'Daily', " +
+          "group_by := 'Dimension:ServiceName,TagKey:costcenter') WHERE _row_kind IS NULL",
+        description: "Cost by service and cost-center tag over a month (multi-axis grouping)",
+      },
     ],
     tags: {
       "vgi.category": "cost-management",
       "vgi.title": "Azure Cost Query",
+      // The native duckdb_functions().examples carrier drops descriptions, so mirror the
+      // `examples` array here as a described JSON tag (VGI515). Kept byte-identical to the
+      // `examples` above so the two never drift.
+      "vgi.example_queries": JSON.stringify([
+        {
+          description: "Daily actual cost by resource group over a month (data rows only)",
+          sql:
+            "SELECT date, \"ResourceGroup\", cost, currency FROM azure.main.cost_query(" +
+            "'subscriptions/<guid>', '2026-06-01', '2026-06-30', granularity := 'Daily', " +
+            "group_by := 'Dimension:ResourceGroup') WHERE _row_kind IS NULL",
+        },
+        {
+          description: "Ungrouped monthly amortized cost total",
+          sql:
+            "SELECT date, cost, currency FROM azure.main.cost_query(" +
+            "'subscriptions/<guid>', '2026-01-01', '2026-06-30', granularity := 'Monthly', " +
+            "cost_type := 'AmortizedCost') WHERE _row_kind IS NULL",
+        },
+        {
+          description: "Read the restatement watermark to persist for the next incremental scan",
+          sql:
+            "SELECT _watermark_next, _restated_from, _key_columns FROM azure.main.cost_query(" +
+            "'subscriptions/<guid>', '2026-06-01', '2026-06-30') WHERE _row_kind = 'marker'",
+        },
+        {
+          description: "Cost by service and cost-center tag over a month (multi-axis grouping)",
+          sql:
+            "SELECT date, \"ServiceName\", \"costcenter\", cost, currency FROM azure.main.cost_query(" +
+            "'subscriptions/<guid>', '2026-06-01', '2026-06-30', granularity := 'Daily', " +
+            "group_by := 'Dimension:ServiceName,TagKey:costcenter') WHERE _row_kind IS NULL",
+        },
+      ]),
       "vgi.keywords": JSON.stringify([
         "azure",
         "cost",
@@ -186,7 +225,9 @@ export function makeCostFunction(clientFactory: ClientFactory) {
         "Read data rows with `WHERE _row_kind IS NULL`. Persist the marker row's `_watermark_next` as " +
         "the next `from`, and apply each scan by OVERWRITE over `[_restated_from, _watermark_next]` " +
         "keyed on (scope, date, grouping dims) — never a blind INSERT (that double-counts on every " +
-        "restatement). See the example queries for grouped, amortized, and watermark-read calls.",
+        "restatement). Grouping tokens (`Dimension:…` / `TagKey:…`) each add a result column and " +
+        "join the overwrite key; `cost_type := 'AmortizedCost'` spreads reservation/savings-plan " +
+        "purchases across their benefit period.",
       // The result schema is DYNAMIC (varies by the `group_by` argument), so it is
       // documented as vgi.result_dynamic_columns_md (VGI307/VGI326) — one Name | Type |
       // Description variant table per shape. The default (ungrouped) variant adds no

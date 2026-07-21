@@ -221,6 +221,13 @@ const SCHEMA_TAGS: Record<string, string> = {
         "SELECT _watermark_next, _restated_from, _key_columns FROM azure.main.cost_query(" +
         "'subscriptions/<guid>', '2026-06-01', '2026-06-30') WHERE _row_kind = 'marker'",
     },
+    {
+      description: "Cost by service and cost-center tag over a month (multi-axis grouping)",
+      sql:
+        "SELECT date, \"ServiceName\", \"costcenter\", cost, currency FROM azure.main.cost_query(" +
+        "'subscriptions/<guid>', '2026-06-01', '2026-06-30', granularity := 'Daily', " +
+        "group_by := 'Dimension:ServiceName,TagKey:costcenter') WHERE _row_kind IS NULL",
+    },
   ]),
 };
 
