@@ -113,42 +113,27 @@ const CATALOG_TAGS: Record<string, string> = {
     },
   ]),
   // The agent-suitability suite (VGI152), catalog only. Cost queries require an
-  // azure_graph secret and return tenant-/scope-specific, restatement-mutable and
-  // non-deterministic data, so those tasks are graded by success_criteria (LLM judge)
-  // rather than an exact-compare reference_sql (which would need live credentials and
-  // stable ground truth). The reference_sql on the first task is the canonical call
-  // shape (it names cost_query so coverage counts it, VGI520) — not an exact-value
-  // oracle. The credential-free `dimensions` view IS graded by an exact check_sql.
+  // The agent-suitability suite (VGI152), catalog only. Only each task's name + prompt is
+  // published here (VGI416); the grader fields (reference_sql / check_sql / success_criteria)
+  // live in the private sidecar vgi-agent-tests.yaml, keyed by task name, and are never
+  // shown to the analyst.
   "vgi.agent_test_tasks": JSON.stringify([
     {
       name: "daily_cost_by_resource_group",
       prompt:
         "Show the daily Azure cost for subscription 00000000-0000-0000-0000-000000000000 during January 2026, broken down by resource group.",
-      reference_sql:
-        "SELECT date, \"ResourceGroup\", cost, currency FROM azure.main.cost_query(" +
-        "'subscriptions/00000000-0000-0000-0000-000000000000', '2026-01-01', '2026-01-31', " +
-        "granularity := 'Daily', group_by := 'Dimension:ResourceGroup') WHERE _row_kind IS NULL",
-      success_criteria:
-        "The answer calls cost_query with scope := 'subscriptions/00000000-0000-0000-0000-000000000000', from := '2026-01-01', to := '2026-01-31', granularity := 'Daily', and group_by := 'Dimension:ResourceGroup', filters to data rows (_row_kind IS NULL), and returns date, the ResourceGroup dimension column, and cost.",
     },
     {
       name: "browse_group_by_dimensions",
       prompt: "Which values can I pass to cost_query's group_by argument to break the cost down?",
-      check_sql: "SELECT count(*) > 0 FROM azure.main.dimensions WHERE kind = 'Dimension'",
-      success_criteria:
-        "The answer browses the azure.main.dimensions view (or otherwise lists valid group_by tokens such as Dimension:ResourceGroup, Dimension:ServiceName, and the TagKey:<name> template) and explains that a token value goes straight into cost_query's group_by argument.",
     },
     {
       name: "save_watermark",
       prompt: "After pulling cost, how do I get the value to pass as `from` on the next incremental scan?",
-      success_criteria:
-        "The answer selects _watermark_next from the marker row (_row_kind = 'marker') of cost_query(...) and explains it should be persisted (only after the rows are durable) and passed back as the `from` argument next time.",
     },
     {
       name: "overwrite_not_insert",
       prompt: "How should I apply each cost_query scan into my warehouse table so totals do not double-count?",
-      success_criteria:
-        "The answer explains that costs are restated retroactively, so each scan re-pulls a trailing window and the caller must apply by OVERWRITE (DELETE+INSERT / UPSERT) over [_restated_from, _watermark_next] keyed on (scope, date, grouping dims), never a blind INSERT.",
     },
   ]),
 };

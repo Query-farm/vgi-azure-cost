@@ -1,0 +1,44 @@
+# Private grader sidecar for `vgi-lint simulate` (and `lint`'s VGI520 coverage). The worker
+# publishes only task names + prompts in `vgi.agent_test_tasks` (src/catalog.ts); these
+# grader fields are keyed by that name and never sent to the analyst agent.
+#
+# Live cost scans require an azure_graph secret and return tenant-specific,
+# non-deterministic data, so those tasks are graded by `success_criteria` (LLM judge) rather
+# than an exact-compare `reference_sql`. The `reference_sql` on the first task is the
+# canonical call shape (it names cost_query so VGI520 coverage counts it), not an exact-value
+# oracle. The credential-free `dimensions` view IS graded by an exact `check_sql`.
+tasks:
+  - name: daily_cost_by_resource_group
+    reference_sql: >-
+      SELECT date, "ResourceGroup", cost, currency FROM
+      azure.main.cost_query('subscriptions/00000000-0000-0000-0000-000000000000',
+      '2026-01-01', '2026-01-31', granularity := 'Daily', group_by :=
+      'Dimension:ResourceGroup') WHERE _row_kind IS NULL
+    success_criteria: >-
+      The answer calls cost_query with scope :=
+      'subscriptions/00000000-0000-0000-0000-000000000000', from := '2026-01-01', to :=
+      '2026-01-31', granularity := 'Daily', and group_by := 'Dimension:ResourceGroup', filters
+      to data rows (_row_kind IS NULL), and returns date, the ResourceGroup dimension column,
+      and cost.
+
+  - name: browse_group_by_dimensions
+    check_sql: >-
+      SELECT count(*) > 0 FROM azure.main.dimensions WHERE kind = 'Dimension'
+    success_criteria: >-
+      The answer browses the azure.main.dimensions view (or otherwise lists valid group_by
+      tokens such as Dimension:ResourceGroup, Dimension:ServiceName, and the TagKey:<name>
+      template) and explains that a token value goes straight into cost_query's group_by
+      argument.
+
+  - name: save_watermark
+    success_criteria: >-
+      The answer selects _watermark_next from the marker row (_row_kind = 'marker') of
+      cost_query(...) and explains it should be persisted (only after the rows are durable)
+      and passed back as the `from` argument next time.
+
+  - name: overwrite_not_insert
+    success_criteria: >-
+      The answer explains that costs are restated retroactively, so each scan re-pulls a
+      trailing window and the caller must apply by OVERWRITE (DELETE+INSERT / UPSERT) over
+      [_restated_from, _watermark_next] keyed on (scope, date, grouping dims), never a blind
+      INSERT.
