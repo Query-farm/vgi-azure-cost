@@ -63,6 +63,9 @@ export interface State {
 export function makeCostFunction(clientFactory: ClientFactory) {
   return defineTableFunction<Args, State>({
     name: "cost_query",
+    // Request the azure_graph secret at bind so the connector delivers it (a
+    // missing secret resolves to nothing, so credential-free LIMIT 0 binds still work).
+    requiredSecrets: ["azure_graph"],
     description:
       "Azure Cost Management actual/amortized cost over a trailing RESTATEMENT window, as typed " +
       "DuckDB rows (date, grouping dims, Float64 cost, currency). Costs are restated retroactively, " +
