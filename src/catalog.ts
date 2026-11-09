@@ -33,6 +33,7 @@ export const AZURE_GRAPH_SECRET: SecretTypeDescriptor = {
 /** Catalog-level tags: docs, discovery, provenance, and the agent-test suite. */
 const CATALOG_TAGS: Record<string, string> = {
   "vgi.title": "Azure Cost Management",
+  "vgi.subtitle": "Daily Azure actual and amortized cost as typed SQL rows, with restatement-aware incremental loading.",
   "vgi.doc_llm":
     "Azure Cost Management actual and amortized cost as typed DuckDB rows over a trailing " +
     "RESTATEMENT window. Reach for it to pull a subscription's, resource group's, billing " +
