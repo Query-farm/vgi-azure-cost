@@ -25,7 +25,7 @@ The examples are credential-free `LIMIT 0` bind probes: they check that each fun
 
 All the Query Farm Azure workers use the catalog name `azure`. To attach more than one in the same session, give each its own alias (for example `ATTACH 'azure' AS azure_cost (...)`) and qualify queries with that alias instead of `azure`.
 
-Prebuilt binaries cover macOS (Apple silicon), Linux (x86-64 and arm64). `github-auto://` needs an explicit release tag; change `@v0.2.1` to move to a newer release.
+Prebuilt binaries cover macOS (Apple silicon), Linux (x86-64 and arm64). `github-auto://` needs an explicit release tag; change `@v0.3.0` to move to a newer release.
 
 ### Other ways to run it
 
