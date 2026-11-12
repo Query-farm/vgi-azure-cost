@@ -56,7 +56,7 @@ const catalogInterface = new ReadOnlyCatalogInterface(makeCatalog(functions), re
 serveVgiWorker({
   name: "azure",
   doc: "Azure Cost Management (actual / amortized cost) as typed DuckDB rows over a restatement-aware date watermark — apply by OVERWRITE keyed on (scope, date, dims).",
-  version: "0.3.0",
+  version: "0.4.0",
   repositoryUrl: "https://github.com/Query-farm/vgi-azure-cost",
   serverId: "vgi-azure-cost",
   registry,
