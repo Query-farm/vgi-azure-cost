@@ -92,7 +92,14 @@ test("columnar {columns, rows} maps to WELL-TYPED rows, and ALL pages are collec
   expect(first.dims.ResourceGroup).toBe("rg-a"); // grouping-key dimension value
   // The marker edges: watermark = to, restated_from = from − lookback, key = the dims.
   expect(r.watermarkNext).toBe("2026-06-30");
-  expect(r.restatedFrom).toBe(restatementFloor("2026-06-24", "ActualCost", ACTUAL_LOOKBACK_DAYS));
+  // A bare-date `from` gives a bare-date edge, so `date >= _restated_from` (ISO-date
+  // strings) includes the first restated day; the request body keeps the full datetime.
+  expect(r.restatedFrom).toBe("2026-06-17");
+  expect(r.restatedFrom).toBe(restatementFloor("2026-06-24", "ActualCost", ACTUAL_LOOKBACK_DAYS).slice(0, 10));
+  expect("2026-06-17" >= r.restatedFrom).toBe(true);
+  expect((g.calls[0]!.body.timePeriod as { from: string }).from).toBe(
+    restatementFloor("2026-06-24", "ActualCost", ACTUAL_LOOKBACK_DAYS),
+  );
   expect(r.keyColumns).toEqual(["ResourceGroup"]);
 });
 

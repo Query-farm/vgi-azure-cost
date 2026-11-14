@@ -13,13 +13,15 @@ tasks:
       SELECT date, "ResourceGroup", cost, currency FROM
       azure.main.cost_query('subscriptions/00000000-0000-0000-0000-000000000000',
       '2026-01-01', '2026-01-31', granularity := 'Daily', group_by :=
-      'Dimension:ResourceGroup') WHERE _row_kind IS NULL
+      'Dimension:ResourceGroup') WHERE _row_kind IS NULL AND date >= '2026-01-01' ORDER BY
+      date, "ResourceGroup"
     success_criteria: >-
       The answer calls cost_query with scope :=
       'subscriptions/00000000-0000-0000-0000-000000000000', from := '2026-01-01', to :=
       '2026-01-31', granularity := 'Daily', and group_by := 'Dimension:ResourceGroup', filters
-      to data rows (_row_kind IS NULL), and returns date, the ResourceGroup dimension column,
-      and cost.
+      to data rows (_row_kind IS NULL) dated in January 2026 (the scan also re-pulls 7
+      restatement-lookback days before 2026-01-01, which are not "during January"), and
+      returns date, the ResourceGroup dimension column, and cost.
 
   - name: browse_group_by_dimensions
     check_sql: >-

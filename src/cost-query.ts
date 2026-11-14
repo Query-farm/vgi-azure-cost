@@ -288,5 +288,15 @@ export async function collectCost(
     break;
   }
 
-  return { rows, restatedFrom, watermarkNext, keyColumns: keyCols, pages };
+  return { rows, restatedFrom: markerEdge(restatedFrom, args.from), watermarkNext, keyColumns: keyCols, pages };
+}
+
+/** Format the marker's `_restated_from` in the same shape as the caller's `from`. The
+ *  request body keeps restatementFloor's full ISO datetime, but the caller overwrites
+ *  `date >= _restated_from` over the ISO-DATE `date` column (and stores the bare-date
+ *  `_watermark_next`): '2026-05-25' < '2026-05-25T00:00:00.000Z' as strings, so a
+ *  datetime low edge would silently skip the first restated day. A bare-date `from`
+ *  therefore yields a bare-date edge; a datetime `from` keeps the datetime. */
+export function markerEdge(floorIso: string, from: string): string {
+  return /^\d{4}-\d{2}-\d{2}$/.test(from) ? floorIso.slice(0, 10) : floorIso;
 }
