@@ -120,3 +120,12 @@ before replacing successful saved outputs. The community VGI extension is
 downloaded independently of the Python lock.
 
 The unchanged local Strata Sun and VGI marks link to Query.Farm and VGI.
+
+## SQL credential isolation
+
+The notebook creates Haybarn with a fresh temporary `secret_directory` and
+`allow_persistent_secrets=False` before attaching workers. It fully drains and
+checks an empty secret inventory, then creates only explicitly `TEMPORARY`
+public fixture secrets and verifies their `persistent=false`, `storage=memory`
+metadata. Cleanup removes the temporary directory after closing the connection.
+Existing user SQL secrets are neither read, modified nor deleted.
