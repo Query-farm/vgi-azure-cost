@@ -67,6 +67,11 @@ To attach a local checkout, point `LOCATION` at the launch wrapper:
 ATTACH 'azure' AS azure (TYPE vgi, LOCATION '/path/to/vgi-azure-cost/bin/vgi-azure-cost-worker');
 ```
 
+## Notebooks
+
+[Executed SQL walkthrough: when yesterday's cost changes](notebooks/README.md)
+uses the real cost function with a synthetic local HTTP fixture and a lookback experiment.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).
