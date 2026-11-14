@@ -42,3 +42,20 @@ tasks:
       trailing window and the caller must apply by OVERWRITE (DELETE+INSERT / UPSERT) over
       [_restated_from, _watermark_next] keyed on (scope, date, grouping dims), never a blind
       INSERT.
+
+  # Composed: two cost_query scans (ActualCost + AmortizedCost) joined per resource group.
+  # Live, credential-gated data, so no exact-compare reference_sql; the judge grades the
+  # query shape, which a wrong answer (one scan, no January cut, wrong join key or sign) fails.
+  - name: amortization_gap_by_resource_group
+    success_criteria: >-
+      The answer runs TWO cost_query scans of scope
+      'subscriptions/00000000-0000-0000-0000-000000000000' covering January 2026 (from
+      '2026-01-01', to '2026-01-31'), both with group_by := 'Dimension:ResourceGroup' — one
+      with the default/explicit cost_type 'ActualCost' and one with cost_type :=
+      'AmortizedCost'. Each keeps only data rows (_row_kind IS NULL) dated in January 2026
+      (the scans also re-pull restatement-lookback days before 2026-01-01, which must be
+      excluded), sums cost per ResourceGroup, joins the two on ResourceGroup (a FULL/outer
+      join or coalesce so a group present in only one scan is kept), and returns
+      ResourceGroup, actual_cost, amortized_cost, and gap computed as amortized_cost minus
+      actual_cost, ordered by gap descending. An answer that uses a single scan, omits the
+      January date filter, or reverses the subtraction fails.

@@ -16,6 +16,7 @@
 
 import { Schema, Field, Utf8 } from "@query-farm/apache-arrow";
 import type { CatalogDescriptor, SecretTypeDescriptor, VgiFunction } from "@query-farm/vgi";
+import { COST_QUERY_EXAMPLES } from "./examples.js";
 
 const REPO = "https://github.com/Query-farm/vgi-azure-cost";
 const ISSUES = `${REPO}/issues`;
@@ -124,7 +125,6 @@ const CATALOG_TAGS: Record<string, string> = {
       sql: "SELECT token, kind FROM azure.main.dimensions ORDER BY kind, token",
     },
   ]),
-  // The agent-suitability suite (VGI152), catalog only. Cost queries require an
   // The agent-suitability suite (VGI152), catalog only. Only each task's name + prompt is
   // published here (VGI416); the grader fields (reference_sql / check_sql / success_criteria)
   // live in the private sidecar vgi-agent-tests.yaml, keyed by task name, and are never
@@ -146,6 +146,13 @@ const CATALOG_TAGS: Record<string, string> = {
     {
       name: "overwrite_not_insert",
       prompt: "How should I apply each cost_query scan into my warehouse table so totals do not double-count?",
+    },
+    {
+      name: "amortization_gap_by_resource_group",
+      prompt:
+        "For subscription 00000000-0000-0000-0000-000000000000, compare actual and amortized cost per " +
+        "resource group for January 2026 (January days only). Return ResourceGroup, actual_cost, " +
+        "amortized_cost, and gap = amortized_cost - actual_cost, largest gap first.",
     },
   ]),
 };
@@ -197,35 +204,9 @@ const SCHEMA_TAGS: Record<string, string> = {
         "Credential-free browsable entry points that describe how to query the catalog before any secret or argument is supplied.",
     },
   ]),
-  "vgi.example_queries": JSON.stringify([
-    {
-      description: "Daily actual cost by resource group over a month (data rows only)",
-      sql:
-        "SELECT date, \"ResourceGroup\", cost, currency FROM azure.main.cost_query(" +
-        "'subscriptions/<guid>', '2026-06-01', '2026-06-30', granularity := 'Daily', " +
-        "group_by := 'Dimension:ResourceGroup') WHERE _row_kind IS NULL",
-    },
-    {
-      description: "Ungrouped monthly amortized cost total",
-      sql:
-        "SELECT date, cost, currency FROM azure.main.cost_query(" +
-        "'subscriptions/<guid>', '2026-01-01', '2026-06-30', granularity := 'Monthly', " +
-        "cost_type := 'AmortizedCost') WHERE _row_kind IS NULL",
-    },
-    {
-      description: "Read the watermark to persist for the next incremental scan",
-      sql:
-        "SELECT _watermark_next, _restated_from, _key_columns FROM azure.main.cost_query(" +
-        "'subscriptions/<guid>', '2026-06-01', '2026-06-30') WHERE _row_kind = 'marker'",
-    },
-    {
-      description: "Cost by service and cost-center tag over a month (multi-axis grouping)",
-      sql:
-        "SELECT date, \"ServiceName\", \"costcenter\", cost, currency FROM azure.main.cost_query(" +
-        "'subscriptions/<guid>', '2026-06-01', '2026-06-30', granularity := 'Daily', " +
-        "group_by := 'Dimension:ServiceName,TagKey:costcenter') WHERE _row_kind IS NULL",
-    },
-  ]),
+  // The same single-source list the cost_query function carries (src/examples.ts),
+  // including the composed actual-vs-amortized comparison.
+  "vgi.example_queries": JSON.stringify(COST_QUERY_EXAMPLES),
 };
 
 /** The credential-free discovery view: a static manifest of the `group_by` tokens

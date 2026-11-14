@@ -19,6 +19,7 @@ import { defineTableFunction, secretsOfType, type OutputCollector } from "@query
 import { Utf8, Int64 } from "@query-farm/apache-arrow";
 import { collectCost, keyColumns, ACTUAL_LOOKBACK_DAYS, COST_TYPES, GRANULARITIES } from "./cost-query.js";
 import { costSchema, buildCostBatch } from "./schema.js";
+import { COST_QUERY_EXAMPLES } from "./examples.js";
 import type { GraphClient } from "@vgi-azure/graph-core";
 
 export type ClientFactory = (secret: Record<string, unknown>) => GraphClient;
@@ -135,70 +136,14 @@ export function makeCostFunction(clientFactory: ClientFactory) {
         "(effFrom = from − this). Guards against retroactive restatement of recently-reported costs. " +
         "Named (name:=value). Defaults to 7. (AmortizedCost instead uses an open-period clamp.)",
     },
-    examples: [
-      {
-        sql:
-          "SELECT date, \"ResourceGroup\", cost, currency FROM azure.main.cost_query(" +
-          "'subscriptions/<guid>', '2026-06-01', '2026-06-30', granularity := 'Daily', " +
-          "group_by := 'Dimension:ResourceGroup') WHERE _row_kind IS NULL",
-        description: "Daily actual cost by resource group over a month (data rows only)",
-      },
-      {
-        sql:
-          "SELECT date, cost, currency FROM azure.main.cost_query(" +
-          "'subscriptions/<guid>', '2026-01-01', '2026-06-30', granularity := 'Monthly', " +
-          "cost_type := 'AmortizedCost') WHERE _row_kind IS NULL",
-        description: "Ungrouped monthly amortized cost total",
-      },
-      {
-        sql:
-          "SELECT _watermark_next, _restated_from, _key_columns FROM azure.main.cost_query(" +
-          "'subscriptions/<guid>', '2026-06-01', '2026-06-30') WHERE _row_kind = 'marker'",
-        description: "Read the restatement watermark to persist for the next incremental scan",
-      },
-      {
-        sql:
-          "SELECT date, \"ServiceName\", \"costcenter\", cost, currency FROM azure.main.cost_query(" +
-          "'subscriptions/<guid>', '2026-06-01', '2026-06-30', granularity := 'Daily', " +
-          "group_by := 'Dimension:ServiceName,TagKey:costcenter') WHERE _row_kind IS NULL",
-        description: "Cost by service and cost-center tag over a month (multi-axis grouping)",
-      },
-    ],
+    examples: COST_QUERY_EXAMPLES,
     tags: {
       "vgi.category": "cost-management",
       "vgi.title": "Azure Cost Query",
       // The native duckdb_functions().examples carrier drops descriptions, so mirror the
-      // `examples` array here as a described JSON tag (VGI515). Kept byte-identical to the
-      // `examples` above so the two never drift.
-      "vgi.example_queries": JSON.stringify([
-        {
-          description: "Daily actual cost by resource group over a month (data rows only)",
-          sql:
-            "SELECT date, \"ResourceGroup\", cost, currency FROM azure.main.cost_query(" +
-            "'subscriptions/<guid>', '2026-06-01', '2026-06-30', granularity := 'Daily', " +
-            "group_by := 'Dimension:ResourceGroup') WHERE _row_kind IS NULL",
-        },
-        {
-          description: "Ungrouped monthly amortized cost total",
-          sql:
-            "SELECT date, cost, currency FROM azure.main.cost_query(" +
-            "'subscriptions/<guid>', '2026-01-01', '2026-06-30', granularity := 'Monthly', " +
-            "cost_type := 'AmortizedCost') WHERE _row_kind IS NULL",
-        },
-        {
-          description: "Read the restatement watermark to persist for the next incremental scan",
-          sql:
-            "SELECT _watermark_next, _restated_from, _key_columns FROM azure.main.cost_query(" +
-            "'subscriptions/<guid>', '2026-06-01', '2026-06-30') WHERE _row_kind = 'marker'",
-        },
-        {
-          description: "Cost by service and cost-center tag over a month (multi-axis grouping)",
-          sql:
-            "SELECT date, \"ServiceName\", \"costcenter\", cost, currency FROM azure.main.cost_query(" +
-            "'subscriptions/<guid>', '2026-06-01', '2026-06-30', granularity := 'Daily', " +
-            "group_by := 'Dimension:ServiceName,TagKey:costcenter') WHERE _row_kind IS NULL",
-        },
-      ]),
+      // `examples` above here as a described JSON tag (VGI515). Both come from the single
+      // COST_QUERY_EXAMPLES list (src/examples.ts), so they never drift.
+      "vgi.example_queries": JSON.stringify(COST_QUERY_EXAMPLES),
       "vgi.keywords": JSON.stringify([
         "azure",
         "cost",
