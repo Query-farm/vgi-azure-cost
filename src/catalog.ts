@@ -42,6 +42,17 @@ export const AZURE_GRAPH_SECRET: SecretTypeDescriptor = {
   ])),
 };
 
+// Upstream references rendered into the catalog docs (VGI183: link out to the service, API
+// docs and app-registration/permission docs this worker actually calls).
+const SOURCES_MD =
+  "### Sources and references\n\n" +
+  "- [Azure Cost Management overview](https://learn.microsoft.com/en-us/azure/cost-management-billing/costs/overview-cost-management) — what the actual/amortized cost data is\n" +
+  "- [Cost Management Query - Usage REST API](https://learn.microsoft.com/en-us/rest/api/cost-management/query/usage) — the `Microsoft.CostManagement/query` endpoint `cost_query` calls\n" +
+  "- [Assign access to Cost Management data](https://learn.microsoft.com/en-us/azure/cost-management-billing/costs/assign-access-acm-data) — which role the service principal needs on each scope\n" +
+  "- [Register an app](https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app) — create the app-only client credentials for the `azure_graph` secret";
+const SOURCES_LLM =
+  " Upstream Microsoft docs: Azure Cost Management overview https://learn.microsoft.com/en-us/azure/cost-management-billing/costs/overview-cost-management; Cost Management Query - Usage REST API https://learn.microsoft.com/en-us/rest/api/cost-management/query/usage; Assign access to Cost Management data https://learn.microsoft.com/en-us/azure/cost-management-billing/costs/assign-access-acm-data; Register an app https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app.";
+
 /** Catalog-level tags: docs, discovery, provenance, and the agent-test suite. */
 const CATALOG_TAGS: Record<string, string> = {
   "vgi.title": "Azure Cost Management",
@@ -59,7 +70,7 @@ const CATALOG_TAGS: Record<string, string> = {
     "is the low edge of the window to overwrite; _key_columns guards the group_by key shape (a " +
     "change is a full reload, not an incremental resume). Requires an app-only (client-credentials) " +
     "'azure_graph' secret (tenant_id, client_id, client_secret) whose service principal has Cost " +
-    "Management reader access on the queried scope; tokens are minted for the ARM audience.",
+    "Management reader access on the queried scope; tokens are minted for the ARM audience." + SOURCES_LLM,
   "vgi.doc_md":
     "## Azure Cost Management\n\n" +
     "Azure Cost Management actual/amortized cost as typed DuckDB rows over a restatement-aware date " +
@@ -71,7 +82,7 @@ const CATALOG_TAGS: Record<string, string> = {
     "marker row's `_watermark_next`, and OVERWRITE the window `[_restated_from, _watermark_next]` " +
     "keyed on (scope, date, grouping dims) — never a blind INSERT (that double-counts on every " +
     "restatement). An app-only `azure_graph` secret (Microsoft Entra client credentials with Cost " +
-    "Management reader access) is required; tokens are minted for the ARM audience.",
+    "Management reader access) is required; tokens are minted for the ARM audience.\n\n" + SOURCES_MD,
   "vgi.keywords": JSON.stringify([
     "azure",
     "cost management",
