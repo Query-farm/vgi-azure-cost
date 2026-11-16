@@ -1,0 +1,64 @@
+# name: test/sql/offline.test
+# description: vgi-azure-cost without credentials or network: ATTACH, the advertised functions
+# and tables, and every catalog executable example (credential-free bind probes and
+# static manifests). Runs over every transport; the live Azure scans need an azure_graph
+# secret and are not exercised here.
+# group: [sql]
+
+require-env VGI_TEST_WORKER
+
+# Transport failures must fail the suite rather than silently skip it.
+set ignore_error_messages
+
+statement ok
+ATTACH 'azure' AS azure (TYPE vgi, LOCATION '{VGI_TEST_WORKER}');
+
+query TT
+SELECT DISTINCT schema_name, function_name FROM duckdb_functions() WHERE database_name = 'azure' ORDER BY ALL;
+----
+main	cost_query
+
+query TT
+SELECT schema_name, table_name FROM duckdb_tables() WHERE database_name = 'azure'
+UNION ALL SELECT schema_name, view_name FROM duckdb_views() WHERE database_name = 'azure' ORDER BY ALL;
+----
+main	dimensions
+
+# cost_bind_probe: Bind cost_query and expose its result columns (credential-free; drop LIMIT 0 and attach an azure_graph secret to pull real daily cost)
+query TT
+SELECT column_name, column_type FROM (DESCRIBE SELECT date, cost, currency FROM azure.main.cost_query('subscriptions/00000000-0000-0000-0000-000000000000', '2026-01-01', '2026-01-31') LIMIT 0);
+----
+date	VARCHAR
+cost	DOUBLE
+currency	VARCHAR
+
+query I
+SELECT count(*) FROM (SELECT date, cost, currency FROM azure.main.cost_query('subscriptions/00000000-0000-0000-0000-000000000000', '2026-01-01', '2026-01-31') LIMIT 0);
+----
+0
+
+# cost_grouped_bind_probe: Bind cost_query grouped by resource group and expose its result columns, including the ResourceGroup dimension column (credential-free)
+query TT
+SELECT column_name, column_type FROM (DESCRIBE SELECT date, "ResourceGroup", cost, currency FROM azure.main.cost_query('subscriptions/00000000-0000-0000-0000-000000000000', '2026-01-01', '2026-01-31', group_by := 'Dimension:ResourceGroup') LIMIT 0);
+----
+date	VARCHAR
+ResourceGroup	VARCHAR
+cost	DOUBLE
+currency	VARCHAR
+
+query I
+SELECT count(*) FROM (SELECT date, "ResourceGroup", cost, currency FROM azure.main.cost_query('subscriptions/00000000-0000-0000-0000-000000000000', '2026-01-01', '2026-01-31', group_by := 'Dimension:ResourceGroup') LIMIT 0);
+----
+0
+
+# list_group_by_dimensions: Browse the credential-free dimensions manifest to discover the group_by tokens cost_query accepts (runs with no secret)
+query TT
+SELECT column_name, column_type FROM (DESCRIBE SELECT token, kind FROM azure.main.dimensions ORDER BY kind, token);
+----
+token	VARCHAR
+kind	VARCHAR
+
+query I
+SELECT count(*) FROM (SELECT token, kind FROM azure.main.dimensions ORDER BY kind, token);
+----
+9
